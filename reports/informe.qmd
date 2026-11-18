@@ -1,0 +1,229 @@
+---
+title: "Brechas por sector y ámbito en Matemática de 5°/6° año de secundaria y ranking estandarizado por sector"
+subtitle: "Aprender 2024: desempeño observado y estandarizado por composición estatal y privada"
+lang: es
+date: last-modified
+date-format: long
+format:
+  html:
+    toc: true
+    toc-title: "Contenido"
+    number-sections: true
+    embed-resources: true
+    css: estilo.css
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: preparacion
+library(dplyr)
+library(readr)
+library(knitr)
+
+options(knitr.kable.NA = "")
+ruta <- "../output/tablas/"
+leer <- function(archivo) read_csv(paste0(ruta, archivo), show_col_types = FALSE)
+
+aud    <- leer("auditoria.csv")
+princ  <- leer("estandarizacion_2_estratos.csv")
+sens   <- leer("sensibilidad_rankings.csv")
+b_sec  <- leer("brecha_privado_estatal.csv")
+b_amb  <- leer("brecha_urbano_rural_estatal.csv")
+pesos  <- leer("pesos_estandar.csv")
+
+n1 <- function(x) format(round(x, 1), nsmall = 1, decimal.mark = ",")
+n0 <- function(x) format(round(x), big.mark = ".", decimal.mark = ",")
+etiq <- function(x) {
+  x <- sub("^Ciudad Autónoma de Buenos Aires$", "CABA", x)
+  x <- sub("^Neuquén$", "Neuquén*", x)
+  sub("^Tierra del Fuego.*$", "Tierra del Fuego", x)
+}
+obt <- function(id) aud$obtenido[aud$control == id]
+
+total_alumnos <- obt("B1")
+pct_nac <- obt("A1c") + obt("A1d")
+peso_priv <- pesos$peso[pesos$estratificacion == "2 estratos" & pesos$estrato == "Privado"]
+sp <- sens$spearman_con_observado[1]
+n_vecinos <- sum(!is.na(princ$menos_de_1pp_del_siguiente))
+n_menos1 <- sum(princ$menos_de_1pp_del_siguiente, na.rm = TRUE)
+mayores <- princ |> filter(abs(cambio_posiciones) == max(abs(cambio_posiciones)))
+mov_texto <- paste0(etiq(mayores$jurisdiccion), " (del puesto ", mayores$pos_obs, " al ", mayores$pos_std2, ")", collapse = " y ")
+n_mov <- max(abs(princ$cambio_posiciones))
+n_rural_mayor <- sum(b_amb$brecha_urbano_menos_rural_pp < 0)
+n_amb <- nrow(b_amb)
+no_elegibles <- etiq(setdiff(princ$jurisdiccion, b_amb$jurisdiccion))
+```
+
+::: {.callout-note}
+## Sobre este informe
+Elaboración propia a partir de datos abiertos de la Secretaría de Educación de la Nación. **No es una publicación oficial** de la Secretaría ni refleja su posición. Los colores están inspirados en tableros públicos de datos educativos; no se usan logos, escudos ni tipografías institucionales.
+:::
+
+# Resumen
+
+- En 2024, el **`r n1(pct_nac)`%** de los `r n0(total_alumnos)` alumnos de 5°/6° año (ponderados) alcanzó el nivel satisfactorio o avanzado en Matemática. El nivel avanzado es casi inexistente, así que el indicador equivale en la práctica a "satisfactorio".
+- En todas las jurisdicciones las escuelas privadas tienen un porcentaje mayor que las estatales. La brecha va de **`r n1(min(b_sec$brecha_privado_menos_estatal_pp))`** a **`r n1(max(b_sec$brecha_privado_menos_estatal_pp))`** puntos porcentuales.
+- Si todas las jurisdicciones tuvieran la misma proporción de alumnos en escuelas estatales y privadas, el ranking cambiaría poco: la correlación de Spearman entre el ranking observado y el estandarizado es **`r format(round(sp, 3), decimal.mark = ",")`**. Los mayores movimientos son de `r n_mov` puestos: `r mov_texto`.
+- `r n_menos1` de las `r n_vecinos` diferencias entre jurisdicciones contiguas en el ranking estandarizado son menores a 1 punto. Por una regla fijada antes de calcular la estandarización, **no se interpretan las posiciones del tramo medio**.
+- El análisis es **descriptivo**. Ajustar por sector no identifica el efecto de ninguna política ni de ninguna gestión, y no controla por nivel socioeconómico. **No se comparan niveles de desempeño con la primaria**: son grados, años y pruebas distintos.
+
+# Pregunta y alcance
+
+¿Cuánto del desempeño de cada jurisdicción en Matemática de 5°/6° año se relaciona con cuántos alumnos asisten a escuelas estatales o privadas? Si todas las jurisdicciones tuvieran la misma composición, ¿cambia el ranking?
+
+Fuera de alcance: el nivel socioeconómico como ajuste, la evolución entre ediciones, el Relevamiento Anual, la comparación con la primaria y cualquier juicio sobre la gestión o la calidad de los datos de una jurisdicción.
+
+# Datos
+
+- **Fuente:** Aprender 2024, secundaria 5°/6° año, Matemática, base agregada por jurisdicción, departamento, sector y ámbito, de los datos abiertos de la Subsecretaría de Información y Evaluación Educativa (Secretaría de Educación de la Nación).
+- **Estructura:** 1.175 filas y 1.035 columnas. Cada fila combina jurisdicción, departamento, sector (estatal o privado) y ámbito (urbano o rural), con conteos ya ponderados.
+- **Indicador:** porcentaje de alumnos en nivel satisfactorio o avanzado, calculado siempre **sumando conteos** y nunca promediando porcentajes de celdas.
+- **Casilleros vacíos** en las columnas de desempeño: se interpretan como cero. Los totales reproducen las cifras oficiales (ver la auditoría).
+- **Participación:** el informe oficial registra 379.079 estudiantes participantes (70,2%); los datos ponderados suman `r n0(total_alumnos)`, coherente con que los ponderadores expandan a la matrícula del marco (supuesto, sin verificar).
+- Los datos no se incluyen en el repositorio; las instrucciones de descarga están en `data/README.md`.
+
+# Método
+
+**Estandarización directa por sector.** Para cada jurisdicción *j*, con tasas *p*<sub>jh</sub> en cada estrato *h* (estatal, privado) y pesos nacionales *w*<sub>h</sub> (proporción de alumnos del país en cada estrato; privado = `r format(round(peso_priv, 3), decimal.mark = ",")`):
+
+<p style="text-align:center; font-size:1.2em;"><em>p</em><sub>j</sub><sup>est</sup> = Σ<sub>h</sub> <em>w</em><sub>h</sub> · <em>p</em><sub>jh</sub></p>
+
+La diferencia entre el valor observado y el estandarizado es el efecto de la composición. Con los pesos propios de cada jurisdicción se recupera exactamente el valor observado (prueba incluida en el código).
+
+**Reglas fijadas antes de calcular la estandarización:** cuando se fijaron, ya se conocía el desempeño observado por sector y ámbito, que se había auditado antes; lo que no se había calculado era la estandarización ni sus sensibilidades.
+
+1. Estratificación principal con 2 estratos (estatal y privado), válida para las 24 jurisdicciones.
+2. No se interpretan diferencias de posición entre jurisdicciones separadas por menos de 1 punto porcentual, porque la base agregada no permite calcular intervalos de muestreo.
+3. Neuquén tuvo participación baja (62,3% de las escuelas y 42,5% de los estudiantes, según el informe oficial): se marca con asterisco y se excluye en una de las sensibilidades.
+4. Se reportan todas las especificaciones corridas, incluidas las que no cambian el ranking.
+
+# Auditoría de los datos
+
+Antes de analizar se reprodujeron 20 cifras oficiales: los cuatro niveles de desempeño a nivel nacional, por sector y por ámbito. Las diferencias son menores a 0,05 puntos, es decir, están dentro del redondeo a un decimal. Los controles B verifican el total de alumnos y la consistencia interna de los estratos.
+
+```{r}
+#| label: tabla-auditoria
+aud |>
+  filter(resultado %in% c("OK", "FALLA")) |>
+  transmute(
+    Control = control, Descripción = descripcion,
+    Esperado = esperado, Obtenido = obtenido, Diferencia = diferencia,
+    Resultado = resultado
+  ) |>
+  kable(digits = 3, format.args = list(decimal.mark = ",", big.mark = "."),
+        align = "llrrrc")
+```
+
+Información adicional de la auditoría:
+
+```{r}
+#| label: tabla-info
+aud |>
+  filter(resultado == "INFO") |>
+  transmute(Descripción = descripcion, Valor = n0(obtenido)) |>
+  kable(align = "lr")
+```
+
+**Dos versiones oficiales.** La comunicación de junio de 2025, que reprodujo la prensa, informó 14,2% satisfactorio y 54,6% por debajo del básico a nivel nacional. La síntesis actualizada a noviembre de 2025 informa 17,5% satisfactorio y 54,3% por debajo del básico. Los datos de este informe coinciden con la versión actualizada. No se verificó el motivo de la diferencia entre ambas.
+
+# Resultados
+
+## Desempeño por jurisdicción
+
+![](../output/figuras/fig1_pct_sat_av_por_jurisdiccion.png){fig-alt="Barras horizontales con el porcentaje de alumnos en nivel satisfactorio o avanzado por jurisdicción, ordenadas de mayor a menor."}
+
+## Brecha entre escuelas privadas y estatales
+
+![](../output/figuras/fig2_brecha_privado_estatal.png){fig-alt="Barras horizontales con la diferencia en puntos porcentuales entre escuelas privadas y estatales por jurisdicción."}
+
+## Brecha urbano-rural dentro del sector estatal
+
+Solo para las `r n_amb` jurisdicciones con al menos 500 alumnos en cada estrato (quedan afuera `r paste(no_elegibles, collapse = ", ")`).
+
+```{r}
+#| label: tabla-ambito
+b_amb |>
+  transmute(
+    Jurisdicción = etiq(jurisdiccion),
+    `Urbano (%)` = `pct_sat_av_Estatal urbano`,
+    `Rural (%)` = `pct_sat_av_Estatal rural`,
+    `Brecha urbano - rural (pp)` = brecha_urbano_menos_rural_pp
+  ) |>
+  kable(digits = 1, format.args = list(decimal.mark = ","), align = "lrrr")
+```
+
+En `r n_rural_mayor` de las `r n_amb` jurisdicciones, las escuelas estatales rurales tienen un porcentaje **mayor** que las urbanas. Es un patrón de los datos y no se interpreta: no se conocen la participación por ámbito ni qué escuelas componen cada estrato.
+
+## Ranking observado y estandarizado
+
+![](../output/figuras/fig3_observado_vs_estandarizado.png){fig-alt="Puntos que comparan el porcentaje observado con el estandarizado por sector para cada jurisdicción."}
+
+```{r}
+#| label: tabla-principal
+princ |>
+  transmute(
+    Jurisdicción = etiq(jurisdiccion),
+    `Observado (%)` = p_obs,
+    `Estandarizado (%)` = p_std2,
+    `Efecto composición (pp)` = efecto_composicion_pp,
+    `Alumnos en privadas (%)` = share_privado,
+    `Puesto observado` = pos_obs,
+    `Puesto estandarizado` = pos_std2,
+    `Menos de 1 pp del siguiente` = ifelse(menos_de_1pp_del_siguiente, "sí", "no")
+  ) |>
+  kable(digits = c(NA, 1, 1, 1, 1, 0, 0, NA), format.args = list(decimal.mark = ","),
+        align = "lrrrrrrc")
+```
+
+\* Neuquén: participación baja (62,3% de las escuelas y 42,5% de los estudiantes).
+
+Lectura permitida: el ranking cambia poco al ajustar por sector, y los movimientos más grandes se dan en jurisdicciones con una composición distinta de la nacional. Esta tabla no explica por qué difieren las jurisdicciones.
+
+## Sensibilidad
+
+```{r}
+#| label: tabla-sensibilidad
+sens |>
+  transmute(
+    Especificación = especificacion,
+    Jurisdicciones = n_jurisdicciones,
+    `Correlación de Spearman` = spearman_con_observado,
+    `Mayor cambio de puestos` = max_cambio_posiciones
+  ) |>
+  kable(digits = c(NA, 0, 3, 0), format.args = list(decimal.mark = ","), align = "lrrr")
+```
+
+El resultado general se mantiene en un rango estrecho entre especificaciones: la correlación va de `r format(round(min(sens$spearman_con_observado), 2), decimal.mark = ",")` a `r format(round(max(sens$spearman_con_observado), 2), decimal.mark = ",")`.
+
+# Limitaciones
+
+1. **Estandarización solo por sector**: no se ajusta por nivel socioeconómico ni por ámbito, así que quedan diferencias de contexto sin controlar.
+2. **Sin intervalos de muestreo**: la base viene agregada y ponderada. Los rankings cercanos no son distinguibles.
+3. **Participación**: respondió el 70,2% de los estudiantes, y en algunas jurisdicciones mucho menos (Neuquén, 42,5%). No se evaluó el sesgo por no respuesta.
+4. **Pesos de 2024**: dependen de la composición nacional de esa edición.
+5. **Ponderadores**: las bases ya vienen ponderadas, y no se leyó el documento que explica qué representan los pesos.
+6. **Foto de un año**: no dice nada sobre evolución, y no se compara con la primaria.
+7. **Nivel avanzado casi inexistente**: el indicador es en la práctica "satisfactorio".
+8. **Descriptivo**: nada de lo anterior debe leerse como efecto de la gestión, de una política o de la calidad de una jurisdicción.
+
+# Reproducibilidad
+
+El código, el diseño del análisis (con todas las reglas fijadas antes de calcular la estandarización) y las instrucciones de descarga están en el repositorio. Para regenerar este informe:
+
+```
+Rscript R/01_carga.R
+Rscript R/02_auditoria.R
+Rscript R/03_indicadores.R
+Rscript R/04_estandarizacion.R
+quarto render reports/informe.qmd
+```
+
+```{r}
+#| label: sesion
+vers <- function(p) as.character(packageVersion(p))
+cat("Versión de R:", R.version.string, "\n")
+cat("dplyr", vers("dplyr"), "| readr", vers("readr"), "| knitr", vers("knitr"), "\n")
+```
