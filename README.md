@@ -2,7 +2,7 @@
 
 > **Elaboración propia a partir de datos abiertos. No es una publicación oficial de la Secretaría de Educación de la Nación ni refleja su posición.**
 
-> **Estado: análisis v0.x, en construcción.** Fases 0 a 5 completas (estructura, carga, auditoría, indicadores descriptivos, estandarización por sector e informe en Quarto). Falta la publicación del informe como página web.
+> **Estado: análisis v0.x, en construcción.** Fases 0 a 5 completas (estructura, carga, auditoría, indicadores descriptivos, estandarización por sector e informe en Quarto). Informe publicado como página web: https://friedsam-r.github.io/aprender-2024-secundaria-brechas/reports/informe.html
 
 ## Pregunta
 
@@ -51,7 +51,7 @@ Rscript R/04_estandarizacion.R
 quarto render reports/informe.qmd
 ```
 
-Los scripts frenan con un error si alguna dimensión o control de auditoría no coincide con lo esperado. Las tablas y figuras quedan en `output/`. Probado con R 4.3.3, readr 2.1.5, dplyr 1.1.4, tidyr 1.3.1 y ggplot2 3.4.4. Solo usa paquetes del tidyverse.
+Los scripts frenan con un error si alguna dimensión o control de auditoría no coincide con lo esperado. Las tablas y figuras quedan en `output/`. Probado con R 4.3.3 (readr 2.1.5, dplyr 1.1.4, tidyr 1.3.1, ggplot2 3.4.4) y con R 4.6.0 (dplyr 1.2.1, readr 2.2.0, knitr 1.51), con las mismas cifras de auditoría y de estandarización. Solo usa paquetes del tidyverse.
 
 ## Limitaciones
 
